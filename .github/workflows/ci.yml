@@ -23,4 +23,4 @@ jobs:
         run: cmake --build build --config Debug --parallel
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure --build-config Debug
+        run: ctest --test-dir build --output-on-failure -C Debug
