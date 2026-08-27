@@ -1,10 +1,12 @@
 #pragma once
+#include <algorithm>
 #include <atomic>
 #include <bit>
 #include <concepts>
 #include <cstdint>
 #include <cmath> 
 #include <gtest/gtest_prod.h>
+#include <mutex>
 #include <vector>
 #include "MurmurHash3.h"
 
@@ -43,8 +45,18 @@ class HyperLogLog {
                 max_meaningful_zeros
             );
             
-            // +1 since we're storing position (1-indexed) of the first 1, not leading zeros count
-            registers_[idx] = std::max(registers_[idx], static_cast<uint8_t>(lz_count + 1));
+            uint8_t first_one_pos = lz_count + 1;
+            
+            // registers_[idx] = std::max(registers_[idx], static_cast<uint8_t>(lz_count + 1));
+            std::atomic_ref<uint8_t> atomic_register(registers_[idx]);
+            uint8_t expected = atomic_register.load(std::memory_order_relaxed);
+            while (first_one_pos > expected 
+                && !atomic_register.compare_exchange_weak(
+                    expected,
+                    first_one_pos,
+                    std::memory_order_relaxed,
+                    std::memory_order_relaxed
+                )) {};
         }
         
         uint64_t estimate()  const {
@@ -52,20 +64,24 @@ class HyperLogLog {
             double estimate;
             double sum = 0.0;
 
-            size_t num_zeros = 0;
+            // count first, unused 0
+            size_t num_zeros = 1;
 
-            for (auto reg : registers_) {
-                if (reg == 0) ++num_zeros;
-                sum += 1.0 / (1 << reg);
+            for (size_t i = 1; i < registers_.size(); ++i) {
+                if (registers_[i] == 0) ++num_zeros;
+                sum += 1.0 / (1 << registers_[i]);
             }
 
             if (num_zeros == m_) return 0;
 
+            // TODO: apply corrections as in paper
             estimate = alphamm_ / sum;
             return static_cast<uint64_t>(std::floor(estimate));
         }
 
         void clear() {
+            std::lock_guard<std::mutex> lock(register_mutex);
+            std::ranges::fill(registers_.begin() + 1, registers_.end(), 0);    
         }
 
     private:
@@ -73,7 +89,8 @@ class HyperLogLog {
         size_t                              m_;         // no. of registers
         double                              alphamm_;   // cache alpha * m * m (for estimate formula)
         std::vector<uint8_t>                registers_; 
-       
+        std::mutex                          register_mutex;       
+
         uint64_t    safe_hash(const T& val, uint32_t seed) requires (std::integral<T> && !std::same_as<T, bool>) {
             return hash_bytes(&val, sizeof(T), seed);
         }
