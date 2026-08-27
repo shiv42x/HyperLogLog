@@ -81,3 +81,65 @@ TEST(HLLTest, MultiThreadedMassIngestionStress) {
     EXPECT_GT(final_estimate, 20'000);
     EXPECT_LT(final_estimate, 60'000);
 }
+
+TEST(HLLTest, MillionCardinalityStress) {
+    // Precision 14 = 16,384 registers. 
+    // Standard error margin for p=14 is roughly 1.04 / sqrt(16384) = 0.81%
+    const size_t precision = 14; 
+    hll::HyperLogLog<uint64_t> hll(precision);
+
+    const uint64_t TARGET_CARDINALITY = 1'000'000;
+
+    // Direct loop ingestion is highly optimized for CI pipeline speed
+    for (uint64_t i = 0; i < TARGET_CARDINALITY; ++i) {
+        hll.add(i);
+    }
+
+    uint64_t estimate = hll.estimate();
+
+    // Calculate acceptable bounds using a conservative 3% error margin 
+    // to prevent flaky builds on GitHub Actions due to hash variations.
+    uint64_t lower_bound = static_cast<uint64_t>(TARGET_CARDINALITY * 0.97);
+    uint64_t upper_bound = static_cast<uint64_t>(TARGET_CARDINALITY * 1.03);
+
+    EXPECT_GE(estimate, lower_bound) 
+    EXPECT_LE(estimate, upper_bound) 
+}
+
+TEST(HLLTest, MillionCardinalityMultiThreadedStress) {
+    // Precision 14 = 16,384 registers. 
+    // Standard error margin is roughly 1.04 / sqrt(16384) = 0.81%
+    const size_t precision = 14; 
+    hll::HyperLogLog<uint64_t> hll(precision);
+
+    const uint64_t TOTAL_ITEMS = 1'000'000;
+    const size_t NUM_THREADS = 4; // Matches/stresses standard GitHub Action runner environments
+    const uint64_t ITEMS_PER_THREAD = TOTAL_ITEMS / NUM_THREADS;
+
+    std::vector<std::jthread> threads;
+    threads.reserve(NUM_THREADS);
+
+    // Distribute 1,000,000 unique integers across parallel workers
+    for (size_t t = 0; t < NUM_THREADS; ++t) {
+        uint64_t start_range = t * ITEMS_PER_THREAD;
+        uint64_t end_range = start_range + ITEMS_PER_THREAD;
+
+        threads.emplace_back([&hll, start_range, end_range]() {
+            for (uint64_t i = start_range; i < end_range; ++i) {
+                hll.add(i);
+            }
+        });
+    }
+
+    // Explicitly clear to block and join all worker threads safely
+    threads.clear(); 
+
+    uint64_t estimate = hll.estimate();
+
+    // 3% error boundary to avoid flaky CI builds on random hash distributions
+    uint64_t lower_bound = static_cast<uint64_t>(TOTAL_ITEMS * 0.97);
+    uint64_t upper_bound = static_cast<uint64_t>(TOTAL_ITEMS * 1.03);
+
+    EXPECT_GE(estimate, lower_bound) 
+    EXPECT_LE(estimate, upper_bound) 
+}
