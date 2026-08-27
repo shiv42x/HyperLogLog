@@ -80,7 +80,6 @@ class HyperLogLog {
         }
 
         void clear() {
-            std::lock_guard<std::mutex> lock(register_mutex);
             std::ranges::fill(registers_.begin() + 1, registers_.end(), 0);    
         }
 
@@ -89,7 +88,6 @@ class HyperLogLog {
         size_t                              m_;         // no. of registers
         double                              alphamm_;   // cache alpha * m * m (for estimate formula)
         std::vector<uint8_t>                registers_; 
-        std::mutex                          register_mutex;       
 
         uint64_t    safe_hash(const T& val, uint32_t seed) requires (std::integral<T> && !std::same_as<T, bool>) {
             return hash_bytes(&val, sizeof(T), seed);
