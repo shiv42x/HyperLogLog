@@ -102,8 +102,8 @@ TEST(HLLTest, MillionCardinalityStress) {
     uint64_t lower_bound = static_cast<uint64_t>(TARGET_CARDINALITY * 0.97);
     uint64_t upper_bound = static_cast<uint64_t>(TARGET_CARDINALITY * 1.03);
 
-    EXPECT_GE(estimate, lower_bound) 
-    EXPECT_LE(estimate, upper_bound) 
+    EXPECT_GE(estimate, lower_bound);
+    EXPECT_LE(estimate, upper_bound);
 }
 
 TEST(HLLTest, MillionCardinalityMultiThreadedStress) {
@@ -140,6 +140,6 @@ TEST(HLLTest, MillionCardinalityMultiThreadedStress) {
     uint64_t lower_bound = static_cast<uint64_t>(TOTAL_ITEMS * 0.97);
     uint64_t upper_bound = static_cast<uint64_t>(TOTAL_ITEMS * 1.03);
 
-    EXPECT_GE(estimate, lower_bound) 
-    EXPECT_LE(estimate, upper_bound) 
+    EXPECT_GE(estimate, lower_bound); 
+    EXPECT_LE(estimate, upper_bound);
 }
