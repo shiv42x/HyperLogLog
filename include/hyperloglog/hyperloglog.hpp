@@ -64,10 +64,9 @@ class HyperLogLog {
             double estimate;
             double sum = 0.0;
 
-            // count first, unused 0
-            size_t num_zeros = 1;
+            size_t num_zeros = 0;
 
-            for (size_t i = 1; i < registers_.size(); ++i) {
+            for (size_t i = 0; i < registers_.size(); ++i) {
                 if (registers_[i] == 0) ++num_zeros;
                 sum += 1.0 / (1 << registers_[i]);
             }
@@ -80,7 +79,7 @@ class HyperLogLog {
         }
 
         void clear() {
-            std::ranges::fill(registers_.begin() + 1, registers_.end(), 0);    
+            std::ranges::fill(registers_.begin(), registers_.end(), 0);    
         }
 
     private:
