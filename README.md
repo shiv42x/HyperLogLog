@@ -1,1 +1,2 @@
-[WIP]
+- `add()` is thread-safe and lock-free, through atomic CAS
+- `estimate()`, `merge()` and `clear()` are not because they are not meant to be called while there are active threads `add()`ing to the HyperLogLog
