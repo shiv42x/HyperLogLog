@@ -7,7 +7,7 @@
 #include "hyperloglog/hyperloglog.hpp"
 
 TEST(HLLTest, BasicTest) {
-    hll::HyperLogLog<std::string> hll(4);
+    hll::HyperLogLog<std::string> hll(5);
     ASSERT_EQ(hll.estimate(), 0);
 
     std::vector<std::string> test_strings = {
@@ -25,7 +25,6 @@ TEST(HLLTest, BasicTest) {
     EXPECT_GT(estimate, 0);
 }
 
-// slop below
 // Test 1: Verify the concurrent "Keep Only Max" lock-free register logic under direct contention
 TEST(HLLTest, ConcurrentRegisterUpdateContention) {
     const size_t precision = 4; // 16 registers
@@ -142,4 +141,53 @@ TEST(HLLTest, MillionCardinalityMultiThreadedStress) {
 
     EXPECT_GE(estimate, lower_bound); 
     EXPECT_LE(estimate, upper_bound);
+}
+
+TEST(HLLTest, MergeBasicCombination) {
+    const size_t precision = 5;
+    hll::HyperLogLog<std::string> hll1(precision);
+    hll::HyperLogLog<std::string> hll2(precision);
+
+    // Insert completely disjoint sets of items
+    hll1.add("apple");
+    hll1.add("banana");
+
+    hll2.add("cherry");
+    hll2.add("date");
+
+    // Merge hll2 into hll1
+    hll1.merge(hll2);
+
+    // The merged estimate should account for elements from both sketches
+    uint64_t estimate = hll1.estimate();
+    EXPECT_GE(estimate, 2);
+    EXPECT_LE(estimate, 6);
+}
+
+TEST(HLLTest, MergeIdempotentAndCommutative) {
+    const size_t precision = 6;
+    hll::HyperLogLog<int> hll_a(precision);
+    hll::HyperLogLog<int> hll_b(precision);
+
+    for (int i = 0; i < 500; ++i) {
+        hll_a.add(i);
+    }
+    for (int i = 500; i < 1000; ++i) {
+        hll_b.add(i);
+    }
+
+    // Test Commutativity: merging A into B vs B into A should yield identical cardinality estimates
+    hll::HyperLogLog<int> hll_ab(hll_a);
+    hll_ab.merge(hll_b);
+
+    hll::HyperLogLog<int> hll_ba(hll_b);
+    hll_ba.merge(hll_a);
+
+    EXPECT_EQ(hll_ab.estimate(), hll_ba.estimate());
+
+    // Test Idempotemcy: merging a sketch with itself should not change its state/estimate
+    double estimate_before = hll_ab.estimate();
+    hll_ab.merge(hll_ab);
+
+    EXPECT_EQ(hll_ab.estimate(), estimate_before);
 }

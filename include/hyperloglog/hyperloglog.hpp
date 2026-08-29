@@ -7,6 +7,7 @@
 #include <cmath> 
 #include <gtest/gtest_prod.h>
 #include <mutex>
+#include <stdexcept>
 #include <vector>
 #include "MurmurHash3.h"
 
@@ -14,9 +15,15 @@ namespace hll {
 template <typename T>
 class HyperLogLog {
     public:
+        static int clamp_b(int b) {
+            if (b < 4) return 4;
+            if (b > 16) return 16;
+            return b;
+        }
+
         HyperLogLog() = delete;
         explicit HyperLogLog(uint8_t b):   
-            b_(b), m_(static_cast<size_t>(1) << b), registers_(m_, 0) {
+            b_(clamp_b(b)), m_(static_cast<size_t>(1) << b), registers_(m_, 0) {
                 double alpha;
                 switch (m_) {
                     case 16:
@@ -47,7 +54,6 @@ class HyperLogLog {
             
             uint8_t first_one_pos = lz_count + 1;
             
-            // registers_[idx] = std::max(registers_[idx], static_cast<uint8_t>(lz_count + 1));
             std::atomic_ref<uint8_t> atomic_register(registers_[idx]);
             uint8_t expected = atomic_register.load(std::memory_order_relaxed);
             while (first_one_pos > expected 
@@ -59,23 +65,31 @@ class HyperLogLog {
                 )) {};
         }
         
-        uint64_t estimate()  const {
+        void merge(const HyperLogLog& other) {
+            if (registers_.size() != other.registers_.size()) {
+               throw std::invalid_argument("Cannot merge HLL sketches with differing register sizes.");
+            }
+            
+            std::ranges::transform(
+                registers_, other.registers_, registers_.begin(),
+                [](uint8_t a, uint8_t b) { return std::max(a, b); }
+            );
+        }
+                
+        double estimate()  const {
             // compute harmonic mean
-            double estimate;
             double sum = 0.0;
-
             size_t num_zeros = 0;
 
-            for (size_t i = 0; i < registers_.size(); ++i) {
-                if (registers_[i] == 0) ++num_zeros;
-                sum += 1.0 / (1 << registers_[i]);
+            for (uint8_t r : registers_) {
+                if (r == 0) ++num_zeros;
+                sum += std::ldexp(1.0, -r);
             }
-
-            if (num_zeros == m_) return 0;
-
-            // TODO: apply corrections as in paper
-            estimate = alphamm_ / sum;
-            return static_cast<uint64_t>(std::floor(estimate));
+            double estimate = alphamm_ / sum;
+            if (estimate <= 2.5 * m_) {
+                return m_ * std::log(static_cast<double>(m_) / num_zeros);
+            }
+            return estimate;
         }
 
         void clear() {
@@ -103,4 +117,4 @@ class HyperLogLog {
         }
 };
 
-};
+}; // namespace hll
