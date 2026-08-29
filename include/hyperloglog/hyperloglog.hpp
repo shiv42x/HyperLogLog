@@ -23,7 +23,7 @@ class HyperLogLog {
 
         HyperLogLog() = delete;
         explicit HyperLogLog(uint8_t b):   
-            b_(clamp_b(b)), m_(static_cast<size_t>(1) << b), registers_(m_, 0) {
+            b_(clamp_b(b)), m_(static_cast<size_t>(1) << b_), registers_(m_, 0) {
                 double alpha;
                 switch (m_) {
                     case 16:
@@ -86,7 +86,7 @@ class HyperLogLog {
                 sum += std::ldexp(1.0, -r);
             }
             double estimate = alphamm_ / sum;
-            if (estimate <= 2.5 * m_) {
+            if (num_zeros > 0 && estimate <= 2.5 * m_) {
                 return m_ * std::log(static_cast<double>(m_) / num_zeros);
             }
             return estimate;
